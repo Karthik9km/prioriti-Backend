@@ -16,7 +16,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 app.post('/extract', upload.array('files'), async (req, res) => {
   try {
     const instruction = req.body.instruction ||
-      `Extract the course name, then list each module in the course, and for each module, list its topics.
+      `Extract the course name, then list each module in the course, and for each module, list its topics, and a boolean array with same size as array of topics with every value set as false.
        Name the modules as 'Module 1', 'Module 2', etc., according to their order in the syllabus. Respond in JSON with the structure: 
        [{ courseName, modules: [{ moduleName, topics: [topic1, topic2, ...] }] }].`;
     const results = [];
@@ -54,9 +54,13 @@ app.post('/extract', upload.array('files'), async (req, res) => {
                       topics: {
                         type: "array",
                         items: { type: "string" }
+                      },
+                      done: {
+                        type: "array",
+                        items: { type: "boolean"}
                       }
                     },
-                    propertyOrdering: ["moduleName", "topics"]
+                    propertyOrdering: ["moduleName", "topics", "done"]
                   }
                 }
               },
@@ -81,7 +85,7 @@ app.post('/submit',upload.none(),async (req,res) =>{
   try{
     // syllabus is the extracted data from /extract in json format
     const {weekdayHrs,weekendHrs,startDate,endDate,preference,syllabus}=req.body;  
-    const instruction = `Generate a study plan for the current day. It should look like a list of to-do tasks with the mentioned schema.
+    const instruction = `Generate a study plan for the first day. It should look like a list of to-do tasks with the mentioned schema.
     Generate the plan based on the following data given by the user/student:
     Weekday study hours: ${weekdayHrs}
     Weekend study hours: ${weekendHrs}
@@ -89,29 +93,29 @@ app.post('/submit',upload.none(),async (req,res) =>{
     End date: ${endDate}
     Additional instructions or preferences: ${preference}
     Syllabus of the subjects: ${JSON.stringify(syllabus)}
+    All the topics which correspond to false value in done list must be covered within the start and end date.
+    the plan should have tasks and their curresponding minutes spend for the day.
     The study plan for the day must be realistic enough.
     Do your research and break tough topics into manageable study sessions. The topics may span over different days if needed and can be further broken
     down into sub topics.
-    The study plan for a single day can be a mix of different courses as mentioned in the syllabus similar to different periods in universities or schools. 
-    give the time in am/pm format.
-    Override the study hours if needed to cover the syllabus efficiently`;
+    Create the plan while trying to have a similar progress across the different courses.
+    Make sure you are only giving the plan for the first day, while keeping in mind that the course should be enitrely completed while keeping a somewhat consistent pase.
+    `;
 
     const result = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: [{text:instruction},],
       config:{
-        responseMimeType: 'application/json',
+        responseMimeType: 'application/json',s
         responseSchema: {
           type: 'array',
           items:{
             type:'object',
             properties:{
               task: {type: "string"},
-              date: {type: 'string'},
-              startTime: {type: "string"},
-              endTime: {type: "string"}
+              minutes: {type: "integer"},
             },
-            propertyOrdering:['task','startTime','endTime']
+            propertyOrdering:['task','minutes']
           }
         }
       }
